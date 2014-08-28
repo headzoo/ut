@@ -5,6 +5,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"runtime"
+	"bytes"
+	"fmt"
 )
 
 // Test is the testing.T instance for the test being run.
@@ -23,7 +26,7 @@ func Test() *testing.T {
 // AssertTrue tests whether the given value is true.
 func AssertTrue(actual bool) bool {
 	if !actual {
-		test.Errorf("Failed asserting %q is true.", actual)
+		Errorf("Failed asserting %q is true.", actual)
 		return false
 	}
 	return true
@@ -32,7 +35,7 @@ func AssertTrue(actual bool) bool {
 // AssertFalse tests whether the given value is false.
 func AssertFalse(actual bool) bool {
 	if actual {
-		test.Errorf("Failed asserting %q is false.", actual)
+		Errorf("Failed asserting %q is false.", actual)
 		return false
 	}
 	return true
@@ -41,7 +44,7 @@ func AssertFalse(actual bool) bool {
 // AssertNotNil tests whether the given value is not nil.
 func AssertNotNil(actual interface{}) bool {
 	if actual == nil {
-		test.Errorf("Failed asserting the value is not nil.")
+		Errorf("Failed asserting the value is not nil.")
 		return false
 	}
 	return true
@@ -50,7 +53,7 @@ func AssertNotNil(actual interface{}) bool {
 // AssertNil tests whether the given value is nil.
 func AssertNil(actual interface{}) bool {
 	if actual != nil {
-		test.Errorf("Failed asserting %T is nil.", actual)
+		Errorf("Failed asserting %T is nil.", actual)
 		return false
 	}
 	return true
@@ -60,7 +63,7 @@ func AssertNil(actual interface{}) bool {
 func AssertEmpty(actual interface{}) bool {
 	t := reflect.ValueOf(actual)
 	if !isZero(t) {
-		test.Errorf("Failed asserting %q is empty.", actual)
+		Errorf("Failed asserting %q is empty.", actual)
 		return false
 	}
 	return true
@@ -70,7 +73,7 @@ func AssertEmpty(actual interface{}) bool {
 func AssertNotEmpty(actual interface{}) bool {
 	t := reflect.ValueOf(actual)
 	if isZero(t) {
-		test.Errorf("Failed asserting %q is not empty.", actual)
+		Errorf("Failed asserting %q is not empty.", actual)
 		return false
 	}
 	return true
@@ -79,7 +82,7 @@ func AssertNotEmpty(actual interface{}) bool {
 // AssertEquals tests whether two values are equal.
 func AssertEquals(expected, actual interface{}) bool {
 	if !reflect.DeepEqual(expected, actual) {
-		test.Errorf("Failed asserting %q equals %q.", expected, actual)
+		Errorf("Failed asserting %q equals %q.", expected, actual)
 		return false
 	}
 	return true
@@ -88,7 +91,7 @@ func AssertEquals(expected, actual interface{}) bool {
 // AssertNotEquals tests whether two values do not equal each other.
 func AssertNotEquals(expected, actual interface{}) bool {
 	if reflect.DeepEqual(expected, actual) {
-		test.Errorf("Failed asserting %q is not equal to %q.", expected, actual)
+		Errorf("Failed asserting %q is not equal to %q.", expected, actual)
 		return false
 	}
 	return true
@@ -97,7 +100,7 @@ func AssertNotEquals(expected, actual interface{}) bool {
 // AssertGreaterThan tests whether the actual value is greater than the expected value.
 func AssertGreaterThan(expected, actual int) bool {
 	if expected >= actual {
-		test.Errorf("Failed asserting %q is greater than %q.", actual, expected)
+		Errorf("Failed asserting %q is greater than %q.", actual, expected)
 		return false
 	}
 	return true
@@ -106,7 +109,7 @@ func AssertGreaterThan(expected, actual int) bool {
 // AssertContains tests whether the expected value contains the actual value.
 func AssertContains(expected, actual string) bool {
 	if !strings.Contains(actual, expected) {
-		test.Errorf("Failed asserting %q contains %q.", actual, expected)
+		Errorf("Failed asserting %q contains %q.", actual, expected)
 		return false
 	}
 	return true
@@ -133,4 +136,45 @@ func isZero(v reflect.Value) bool {
 	// Compare other types directly:
 	z := reflect.Zero(v.Type())
 	return v.Interface() == z.Interface()
+}
+
+// Hack.
+func Errorf(format string, args ...interface{}) {
+	format = decorate(format)
+	test.Log(fmt.Sprintf(format, args...))
+	test.Fail()
+}
+
+// decorate prefixes the string with the file and line of the call site
+// and inserts the final newline if needed and indentation tabs for formatting.
+func decorate(s string) string {
+	_, file, line, ok := runtime.Caller(3) // decorate + log + public function.
+	if ok {
+		// Truncate file name at last file name separator.
+		if index := strings.LastIndex(file, "/"); index >= 0 {
+			file = file[index+1:]
+		} else if index = strings.LastIndex(file, "\\"); index >= 0 {
+			file = file[index+1:]
+		}
+	} else {
+		file = "???"
+		line = 1
+	}
+	buf := new(bytes.Buffer)
+	// Every line is indented at least one tab.
+	buf.WriteByte('\t')
+	fmt.Fprintf(buf, "%s:%d: ", file, line)
+	lines := strings.Split(s, "\n")
+	if l := len(lines); l > 1 && lines[l-1] == "" {
+		lines = lines[:l-1]
+	}
+	for i, line := range lines {
+		if i > 0 {
+			// Second and subsequent lines are indented an extra tab.
+			buf.WriteString("\n\t\t")
+		}
+		buf.WriteString(line)
+	}
+	buf.WriteByte('\n')
+	return buf.String()
 }
